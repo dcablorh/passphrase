@@ -26,7 +26,12 @@ A_BITS = 66
 B_BITS = 62
 SCRYPT = dict(n=2**15, r=8, p=1, dklen=16)       # 16 bytes = 128 bits of KDF output
 MIN_SECRET_LEN = 20                              # characters; see note in MIN_SECRET_NOTE
-MIN_SECRET_NOTE = "Use at least 20 characters or 6+ random words."
+MIN_SECRET_DISTINCT = 8                          # distinct characters; rejects "aaaa..." style secrets
+MIN_SECRET_NOTE = "Use at least 20 characters (8+ distinct) or 6+ random words."
+
+
+class WrongSecret(ValueError):
+    """The restored key does not match the expected account: wrong secret or wrong words."""
 
 
 def _kdf_bits(secret: str, label: bytes, bits: int) -> int:
@@ -35,7 +40,7 @@ def _kdf_bits(secret: str, label: bytes, bits: int) -> int:
 
 
 def _check_secret(secret: str) -> None:
-    if len(secret) < MIN_SECRET_LEN:
+    if len(secret) < MIN_SECRET_LEN or len(set(secret)) < MIN_SECRET_DISTINCT:
         raise ValueError(MIN_SECRET_NOTE)
 
 
@@ -69,11 +74,20 @@ def new_short_wallet(secret: str) -> dict:
             "account_id": key["public_key_hex"], "public_key": key["public_key"]}
 
 
-def restore_phrase(short_words: list[str], secret: str) -> str:
-    """Rebuild the 12-word phrase from the 6-word short form and the secret."""
+def restore_phrase(short_words: list[str], secret: str, account_id: str | None = None) -> str:
+    """Rebuild the 12-word phrase from the 6-word short form and the secret.
+
+    Pass the public account_id (64 hex chars, stored next to the words) to detect a
+    wrong secret or a mistyped word: WrongSecret is raised instead of returning a
+    phrase for a different wallet. Without account_id the result is unchecked.
+    """
     _check_secret(secret)
     q = _from_words(short_words)
     a = q ^ _kdf_bits(secret, b"rps-v1-A", A_BITS)
     b = _kdf_bits(secret, b"rps-v1-B", B_BITS)
     entropy = ((a << B_BITS) | b).to_bytes(16, "big")
-    return Mnemonic("english").to_mnemonic(entropy)
+    phrase = Mnemonic("english").to_mnemonic(entropy)
+    if account_id is not None:
+        if key_from_phrase(phrase)["public_key_hex"] != account_id.strip().lower():
+            raise WrongSecret("wrong secret or wrong words: restored account does not match")
+    return phrase
