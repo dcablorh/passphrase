@@ -7,6 +7,8 @@ Given a valid 12-word BIP-39 phrase `P` and a user secret `S`, produce a shorter
 - `Recover(Q, S) = P` exactly, and the same NEAR key is derived.
 - `Q` alone reveals no usable information about `P` (within the stated secret-strength assumptions).
 
+> Update 2026-10-21: the 6-word scheme is chosen and implemented. See docs/05-decision-6-word-scheme.md. The 132-bit figure below is wrong: BIP-39 entropy is 128 bits; the checksum is derived.
+
 ## 2. Why the short form needs the secret
 
 A 12-word BIP-39 phrase encodes 128 bits of entropy plus a 4-bit checksum, 132 bits in total, at 11 bits per word.
